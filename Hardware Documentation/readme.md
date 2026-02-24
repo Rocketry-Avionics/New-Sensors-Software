@@ -1,0 +1,1 @@
+This is where the updated DOCUMENTATION of the new sensors

@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Wire.h>
 #include <Servo.h>
 
 #include "src/Config/FlightConfig.h"
@@ -23,6 +24,7 @@ bool parachuteDeployed = false;
 
 void setup() {
     Serial.begin(9600);
+    Wire.begin();
     delay(2000);
     Serial.println("Flight Computer Booting...");
 

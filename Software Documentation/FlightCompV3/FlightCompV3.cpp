@@ -3,13 +3,13 @@
 #include <Servo.h>
 
 #include "src/Config/flightConfig.h"
-#include "src/Drivers/driver_MPU6050.h"
+#include "src/Drivers/driver_ICM42670.h"
 #include "src/Drivers/driver_BMP581.h"
 #include "src/Control/flightController.h"
 // #include "src/Comms/Telemetry.h"
 
 
-Driver_MPU6050 imu;
+Driver_ICM42670 imu;
 Driver_BMP581 baro;
 
 FlightController controller;

@@ -26,6 +26,10 @@ void FlightController::init() {
     servoY.attach(PIN_SERVO_Y); //Check +Z and +X wrt mpu // Y servo wire connects to upper pins of pcb when flight commputer placed in rocket
     
     servoX.write(90); 
+    // TODO: Verify mechanical trim for Servo Y with physical airframe.
+    // Note: servoY is initialized here to 153 deg, but update() sets neutral to 90 deg 
+    // in deadband and centers around 90 deg in the mixer. If 153 deg is the true 
+    // physical zero, align deadband and mixer neutral offsets accordingly.
     servoY.write(153);
 
 
@@ -36,6 +40,10 @@ void FlightController::init() {
     pidX.SetOutputLimits(-90, 90);
     pidY.SetOutputLimits(-90, 90);
     pidZ.SetOutputLimits(-90, 90); // Not used in this version but can be added later for more control
+
+    pidX.SetSampleTime(PID_SAMPLE_TIME_MS);
+    pidY.SetSampleTime(PID_SAMPLE_TIME_MS);
+    pidZ.SetSampleTime(PID_SAMPLE_TIME_MS);
 
 
     return;

@@ -37,7 +37,8 @@ void Telemetry::transmitData(float altitude,
                               float accelMag,
                               double lat,
                               double lng,
-                              bool parachuteDeployed) {
+                              bool parachuteDeployed,
+                              uint8_t flightState) {
     // Do nothing if init() failed.
     if (!_initialized) return;
 
@@ -62,5 +63,7 @@ void Telemetry::transmitData(float altitude,
     LoRa.print(lng, 6);                             // e.g. "77.594562"
     LoRa.print(",");
     LoRa.print(parachuteDeployed ? "1" : "0");      // "1" or "0"
+    LoRa.print(",");
+    LoRa.print(flightState);                        // e.g. "0", "1", "2", "3", "4"
     LoRa.endPacket(true);                           // async (non-blocking) TX
 }

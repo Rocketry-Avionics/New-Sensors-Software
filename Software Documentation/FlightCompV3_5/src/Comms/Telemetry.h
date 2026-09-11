@@ -15,19 +15,21 @@ public:
 
     // Call every loop(). Internally rate-limited to once per 500ms.
     // Builds and transmits a CSV telemetry packet over LoRa.
-    // Packet format: "alt,maxAlt,accelMag,lat,lng,chute"
+    // Packet format: "alt,maxAlt,accelMag,lat,lng,chute,state"
     //   alt         — barometric altitude in metres (1 decimal place)
     //   maxAlt      — maximum altitude recorded in metres (1 decimal place)
     //   accelMag    — acceleration magnitude in g (2 decimal places)
     //   lat         — GPS latitude in decimal degrees (6 decimal places)
     //   lng         — GPS longitude in decimal degrees (6 decimal places)
     //   chute       — parachute deployed flag: "1" = deployed, "0" = not deployed
+    //   state       — flight state (0=PAD, 1=BOOST, 2=COAST, 3=APOGEE, 4=CHUTE)
     void transmitData(float altitude,
                       float maxAltitude,
                       float accelMag,
                       double lat,
                       double lng,
-                      bool parachuteDeployed);
+                      bool parachuteDeployed,
+                      uint8_t flightState = 0);
 
 private:
     bool _initialized;

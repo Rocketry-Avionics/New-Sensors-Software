@@ -10,6 +10,17 @@
 #include "Comms/Telemetry.h"
 
 
+// Flight State Machine
+enum FlightState {
+    STATE_PAD    = 0,
+    STATE_BOOST  = 1,
+    STATE_COAST  = 2,
+    STATE_APOGEE = 3,
+    STATE_CHUTE  = 4
+};
+
+FlightState flightState = STATE_PAD;
+
 Driver_MPU6500 imu;
 Driver_BMP280 baro;
 Driver_GPS gps;
@@ -22,6 +33,18 @@ Telemetry radio;
 double maxAltitude = 0.0;
 double altitude = 0.0;
 bool parachuteDeployed = false;
+
+// State Machine Debounce & Timing Trackers
+int liftoffDebounceCount = 0;
+int burnoutDebounceCount = 0;
+int apogeeDebounceCount  = 0;
+unsigned long burnoutTimestampMs = 0;
+unsigned long chuteSteadyStartMs = 0;
+
+// Loop Rate Limiting & Diagnostics
+unsigned long lastDebugPrintMs = 0;
+unsigned long lastHeartbeatMs = 0;
+bool heartbeatLedState = false;
 
 
 void setup() {
@@ -42,7 +65,7 @@ void setup() {
     Serial.println("Flight Computer V3.5 Booting...");
 
     pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW); // Turn on LED builtin to indicate board is alive
+    digitalWrite(LED_BUILTIN, LOW); // Active-low on Portenta H7: LOW turns LED on
 
     baro.init();
     baro.update(); // Perform initial reading to initialize internal altitude state
@@ -62,6 +85,8 @@ void setup() {
     // Initialize LoRa SX1278 on SPI1.
     // Pins: NSS=D4, RST=D2, DIO0=D3. Frequency: 433 MHz.
     radio.init();
+
+    Serial.println("Flight Computer V3.5 Ready. State: STATE_PAD");
 }
 
 void loop() {
@@ -71,45 +96,144 @@ void loop() {
 
     altitude = baro.getAlt();
     float accelMag = imu.getAccelMag();
+    float az = imu.getAccZ(); // Vertical acceleration in g
 
-    // Track Max Altitude
-    if (altitude > maxAltitude) maxAltitude = altitude;
-
-    // Apogee Detection Logic
-    if (!parachuteDeployed && (maxAltitude > MIN_ARM_ALTITUDE)) { // First check: must be above min alt. and parachute not deployed.
-
-        if (accelMag < 0.5) { // Second check: Condition for thrust cutoff detection - can be tuned based on testing
-
-            // Final check: Confirm decreasing altitude, This detection logic remains untested. Uncertain if it remains a reliable way to detect apogee.
-            if ((maxAltitude - altitude) >= APOGEE_DROP_THRES) {
-                parachuteServo.write(180); // Deploy parachute
-
-                parachuteDeployed = true;
-
-                Serial.println("\n!!! APOGEE DETECTED - PARACHUTE DEPLOYED !!!");
-            }
-        }
+    // Track Peak Altitude
+    if (altitude > maxAltitude) {
+        maxAltitude = altitude;
     }
 
-    controller.update(imu.getRawDiffX(), imu.getRawDiffZ()); // Y is optional for now, can be added in future versions
+    // ─── Flight State Machine ──────────────────────────────────────────────
+    switch (flightState) {
+        case STATE_PAD:
+            // Dual confirmation: high axial acceleration (> 2.5g) AND altitude above pad (> 5m)
+            // debounced across consecutive samples to reject pad handling bumps.
+            if (az > LIFTOFF_ACCEL_THRES && altitude > LIFTOFF_ALT_THRES) {
+                liftoffDebounceCount++;
+                if (liftoffDebounceCount >= DEBOUNCE_LIFTOFF_COUNT) {
+                    flightState = STATE_BOOST;
+                    liftoffDebounceCount = 0;
+                    Serial.println("\n>>> LIFTOFF DETECTED - STATE_BOOST <<<");
+                }
+            } else {
+                liftoffDebounceCount = 0;
+            }
+            break;
 
-    Serial.print("\nAltitude: ");
-    Serial.print(altitude);
-    Serial.print(" m | Max Altitude: ");
-    Serial.print(maxAltitude);
-    Serial.print(" m | Accel Mag: ");
-    Serial.print(accelMag);
-    Serial.println(" m/s^2");
+        case STATE_BOOST:
+            // Burnout is detected when axial acceleration flips negative (az <= 0.0g)
+            // due to thrust cutoff and aerodynamic drag, debounced across samples.
+            if (az <= BURNOUT_ACCEL_THRES) {
+                burnoutDebounceCount++;
+                if (burnoutDebounceCount >= DEBOUNCE_BURNOUT_COUNT) {
+                    flightState = STATE_COAST;
+                    burnoutDebounceCount = 0;
+                    burnoutTimestampMs = millis();
+                    Serial.println("\n>>> BURNOUT DETECTED - STATE_COAST <<<");
+                }
+            } else {
+                burnoutDebounceCount = 0;
+            }
+            break;
 
-    // Transmit telemetry to Ground Station via LoRa SX1278.
-    // Rate-limited internally to once per 500ms.
-    // Packet: "alt,maxAlt,accelMag,lat,lng,chute"
+        case STATE_COAST: {
+            bool apogeeConfirmed = false;
+
+            // Primary check: confirm decreasing altitude after reaching arming altitude
+            if (maxAltitude > MIN_ARM_ALTITUDE && (maxAltitude - altitude) >= APOGEE_DROP_THRES) {
+                apogeeDebounceCount++;
+                if (apogeeDebounceCount >= DEBOUNCE_APOGEE_COUNT) {
+                    apogeeConfirmed = true;
+                    Serial.println("\n>>> APOGEE DETECTED (Baro Drop) - STATE_APOGEE <<<");
+                }
+            } else {
+                apogeeDebounceCount = 0;
+            }
+
+            // Backup Safety Failsafe: Trigger if timeout expires post-burnout
+            if (millis() - burnoutTimestampMs >= APOGEE_BACKUP_TIMEOUT_MS) {
+                apogeeConfirmed = true;
+                Serial.println("\n>>> Backup Failsafe Timer Triggered - STATE_APOGEE <<<");
+            }
+
+            if (apogeeConfirmed) {
+                flightState = STATE_APOGEE;
+                apogeeDebounceCount = 0;
+
+                // Immediately actuate parachute servo upon entering STATE_APOGEE
+                parachuteServo.write(180);
+                parachuteDeployed = true;
+                chuteSteadyStartMs = 0;
+                Serial.println("\n!!! APOGEE DETECTED - PARACHUTE SERVO ACTUATED !!!");
+            }
+            break;
+        }
+
+        case STATE_APOGEE:
+            // Parachute servo has been commanded. Verify canopy inflation:
+            // When descending steadily under canopy, longitudinal acceleration az
+            // sits consistently near 1.0g (drag balancing rocket weight).
+            // Lateral acceleration is excluded to prevent wind gusts from disrupting verification.
+            if (az >= CHUTE_STEADY_AZ_MIN && az <= CHUTE_STEADY_AZ_MAX) {
+                if (chuteSteadyStartMs == 0) {
+                    chuteSteadyStartMs = millis();
+                } else if (millis() - chuteSteadyStartMs >= CHUTE_CONFIRM_DURATION_MS) {
+                    flightState = STATE_CHUTE;
+                    Serial.println("\n>>> PARACHUTE CANOPY CONFIRMED - STATE_CHUTE <<<");
+                }
+            } else {
+                // Reset timer if az fluctuates outside steady descent window
+                chuteSteadyStartMs = 0;
+            }
+            break;
+
+        case STATE_CHUTE:
+            // Parachute deployed, rocket descending under canopy
+            break;
+    }
+
+    // Active Stabilization PID Control
+    controller.update(imu.getRawDiffX(), imu.getRawDiffZ());
+
+    // ─── Rate-Limited Debug Output (10 Hz) ──────────────────────────────────
+    unsigned long now = millis();
+    if (now - lastDebugPrintMs >= SERIAL_DEBUG_INTERVAL_MS) {
+        lastDebugPrintMs = now;
+        Serial.print("\nAlt: ");
+        Serial.print(altitude, 1);
+        Serial.print(" m | Max: ");
+        Serial.print(maxAltitude, 1);
+        Serial.print(" m | az: ");
+        Serial.print(az, 2);
+        Serial.print(" g | State: ");
+        switch (flightState) {
+            case STATE_PAD:    Serial.print("PAD");    break;
+            case STATE_BOOST:  Serial.print("BOOST");  break;
+            case STATE_COAST:  Serial.print("COAST");  break;
+            case STATE_APOGEE: Serial.print("APOGEE"); break;
+            case STATE_CHUTE:  Serial.print("CHUTE");  break;
+        }
+        Serial.print(" | Chute: ");
+        Serial.print(parachuteDeployed ? "1" : "0");
+    }
+
+    // ─── Heartbeat LED Toggle (1 Hz) ───────────────────────────────────────
+    if (now - lastHeartbeatMs >= 500UL) {
+        lastHeartbeatMs = now;
+        heartbeatLedState = !heartbeatLedState;
+        digitalWrite(LED_BUILTIN, heartbeatLedState ? LOW : HIGH); // Active-low
+    }
+
+    // ─── LoRa Telemetry Broadcast (2 Hz) ───────────────────────────────────
+    // Packet format: "alt,maxAlt,accelMag,lat,lng,chute,state"
     radio.transmitData(
         (float)altitude,
         (float)maxAltitude,
         accelMag,
         gps.getLat(),
         gps.getLng(),
-        parachuteDeployed
+        parachuteDeployed,
+        (uint8_t)flightState
     );
 }
+

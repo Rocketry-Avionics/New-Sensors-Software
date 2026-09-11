@@ -16,6 +16,9 @@ public:
     float getRawDiffZ() const;
 
     float getAccelMag() const;
+    float getAccX() const;
+    float getAccY() const;
+    float getAccZ() const; // Axial / vertical acceleration in g
 
 private:
     MPU6500_SPI mpu;

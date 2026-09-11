@@ -49,3 +49,15 @@ float Driver_MPU6500::getRawDiffZ() const {
 float Driver_MPU6500::getAccelMag() const {
     return accelMag;
 }
+
+float Driver_MPU6500::getAccX() const {
+    return mpu.getAccX();
+}
+
+float Driver_MPU6500::getAccY() const {
+    return mpu.getAccY();
+}
+
+float Driver_MPU6500::getAccZ() const {
+    return mpu.getAccZ();
+}

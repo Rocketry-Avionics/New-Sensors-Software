@@ -8,6 +8,7 @@
 #include "Drivers/driver_GPS.h"
 #include "Control/flightController.h"
 #include "Comms/Telemetry.h"
+#include "Logging/Blackbox.h"
 
 
 // Flight State Machine
@@ -29,6 +30,7 @@ FlightController controller;
 Servo parachuteServo;
 
 Telemetry radio;
+Blackbox blackbox;
 
 double maxAltitude = 0.0;
 double altitude = 0.0;
@@ -86,6 +88,9 @@ void setup() {
     // Pins: NSS=D4, RST=D2, DIO0=D3. Frequency: 433 MHz.
     radio.init();
 
+    // Initialize Blackbox SDMMC high-rate data logger on Portenta Breakout board
+    blackbox.init(baro.getGroundRefPres());
+
     Serial.println("Flight Computer V3.5 Ready. State: STATE_PAD");
 }
 
@@ -113,6 +118,7 @@ void loop() {
                 if (liftoffDebounceCount >= DEBOUNCE_LIFTOFF_COUNT) {
                     flightState = STATE_BOOST;
                     liftoffDebounceCount = 0;
+                    blackbox.flush();
                     Serial.println("\n>>> LIFTOFF DETECTED - STATE_BOOST <<<");
                 }
             } else {
@@ -129,6 +135,7 @@ void loop() {
                     flightState = STATE_COAST;
                     burnoutDebounceCount = 0;
                     burnoutTimestampMs = millis();
+                    blackbox.flush();
                     Serial.println("\n>>> BURNOUT DETECTED - STATE_COAST <<<");
                 }
             } else {
@@ -164,6 +171,7 @@ void loop() {
                 parachuteServo.write(180);
                 parachuteDeployed = true;
                 chuteSteadyStartMs = 0;
+                blackbox.flush();
                 Serial.println("\n!!! APOGEE DETECTED - PARACHUTE SERVO ACTUATED !!!");
             }
             break;
@@ -179,6 +187,7 @@ void loop() {
                     chuteSteadyStartMs = millis();
                 } else if (millis() - chuteSteadyStartMs >= CHUTE_CONFIRM_DURATION_MS) {
                     flightState = STATE_CHUTE;
+                    blackbox.flush();
                     Serial.println("\n>>> PARACHUTE CANOPY CONFIRMED - STATE_CHUTE <<<");
                 }
             } else {
@@ -195,8 +204,30 @@ void loop() {
     // Active Stabilization PID Control
     controller.update(imu.getRawDiffX(), imu.getRawDiffZ());
 
-    // ─── Rate-Limited Debug Output (10 Hz) ──────────────────────────────────
     unsigned long now = millis();
+
+    // ─── High-Rate Blackbox Logging (50 Hz) ────────────────────────────────
+    blackbox.logRecord(
+        now,
+        (uint8_t)flightState,
+        baro.getPres(),
+        baro.getTemp(),
+        imu.getAccX(),
+        imu.getAccY(),
+        imu.getAccZ(),
+        imu.getGyroX(),
+        imu.getGyroY(),
+        imu.getGyroZ(),
+        controller.getServoX(),
+        controller.getServoY(),
+        parachuteDeployed,
+        gps.getLat(),
+        gps.getLng(),
+        gps.getGPSAlt(),
+        gps.getSatellites()
+    );
+
+    // ─── Rate-Limited Debug Output (10 Hz) ──────────────────────────────────
     if (now - lastDebugPrintMs >= SERIAL_DEBUG_INTERVAL_MS) {
         lastDebugPrintMs = now;
         Serial.print("\nAlt: ");

@@ -6,6 +6,7 @@ FlightController::FlightController():
     setpoint(0.0), inputX(0.0), outputX(0.0),
     inputY(0.0), outputY(0.0),
     inputZ(0.0), outputZ(0.0),
+    servo_x(90.0), servo_y(153.0),
 
     pidX(&inputX, &outputX, &setpoint, PID_KP, PID_KI, PID_KD, DIRECT),
     pidY(&inputY, &outputY, &setpoint, PID_KP, PID_KI, PID_KD, DIRECT),

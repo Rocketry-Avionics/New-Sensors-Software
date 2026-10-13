@@ -20,6 +20,10 @@ public:
     float getAccY() const;
     float getAccZ() const; // Axial / vertical acceleration in g
 
+    float getGyroX() const;
+    float getGyroY() const;
+    float getGyroZ() const;
+
 private:
     MPU6500_SPI mpu;
 

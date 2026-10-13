@@ -17,6 +17,7 @@ public:
     float getAlt() const;
     float getTemp() const;
     float getPres() const;
+    float getGroundRefPres() const;
 
 private:
     Adafruit_BMP280 bmp;

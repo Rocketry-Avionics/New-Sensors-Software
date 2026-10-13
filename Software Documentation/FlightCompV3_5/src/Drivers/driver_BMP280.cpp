@@ -62,3 +62,7 @@ float Driver_BMP280::getTemp() const {
 float Driver_BMP280::getPres() const {
     return currentPres;
 }
+
+float Driver_BMP280::getGroundRefPres() const {
+    return grndRefPres;
+}

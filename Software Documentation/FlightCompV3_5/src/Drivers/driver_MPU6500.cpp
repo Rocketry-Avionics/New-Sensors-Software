@@ -4,7 +4,7 @@ Driver_MPU6500::Driver_MPU6500(): mpu(SPI, PIN_CS_MPU) {
 }
 
 bool Driver_MPU6500::init() {
-    byte status = mpu.begin();
+    byte status = mpu.begin(1, 3); // 1 = +/-500dps gyro, 3 = +/-16g accelerometer for rocketry
     if (status != 0) {
         Serial.println("MPU6500 initialization failed!");
         while(1); // Halt
@@ -60,4 +60,16 @@ float Driver_MPU6500::getAccY() const {
 
 float Driver_MPU6500::getAccZ() const {
     return mpu.getAccZ();
+}
+
+float Driver_MPU6500::getGyroX() const {
+    return mpu.getGyroX();
+}
+
+float Driver_MPU6500::getGyroY() const {
+    return mpu.getGyroY();
+}
+
+float Driver_MPU6500::getGyroZ() const {
+    return mpu.getGyroZ();
 }

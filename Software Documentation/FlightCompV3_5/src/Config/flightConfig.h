@@ -76,4 +76,8 @@ const double KALMAN_Q = 10.0;
 // LoRa Radio Frequency — 433 MHz ISM band (India), exact 32-bit integer
 const long LORA_FREQUENCY = 433000000L;
 
+// Blackbox High-Rate Logging Configuration (Portenta Breakout MicroSD / SDMMC)
+const unsigned long LOG_INTERVAL_MS = 20UL;         // 50 Hz logging interval
+const unsigned long LOG_FLUSH_INTERVAL_MS = 1000UL; // 1 Hz periodic flush
+
 #endif

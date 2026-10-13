@@ -18,6 +18,9 @@ class FlightController {
 
         void update(double raw_diff_x, double raw_diff_z, double raw_diff_y = 0.0); // Y is optional for now, can be used in future versions
 
+        double getServoX() const { return servo_x; }
+        double getServoY() const { return servo_y; }
+
         void printDebug() const; // Optional: For printing internal states for debugging
 
     private:

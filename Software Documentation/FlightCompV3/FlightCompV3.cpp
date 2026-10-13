@@ -61,7 +61,9 @@ void loop() {
 
     // A. Apogee Detection Logic
     if (!parachuteDeployed && maxAltitude > MIN_ARM_ALTITUDE) {
-        if (accelMag < 0.5) { // Must be a different value. Change it later.
+        if (accelMag < 0.5) { // Condition for thrust cutoff detection - can be tuned based on testing
+            
+            // This detection logic remains untested. Uncertain if it remains a reliable way to detect apogee.
             if ((maxAltitude - altitude) >= APOGEE_DROP_THRES) {
                 parachuteServo.write(180); // Deploy parachute
 
@@ -69,6 +71,8 @@ void loop() {
 
                 Serial.println("\n!!! APOGEE DETECTED - PARACHUTE DEPLOYED !!!");
             }
+
+
         }
     }
 
